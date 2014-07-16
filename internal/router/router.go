@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-
 	"github.com/juju/charmstore/params"
 	"gopkg.in/juju/charm.v2"
 	"labix.org/v2/mgo"
@@ -141,7 +140,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 // given path, and the remaining path elements. If there is no possible
 // key, the returned key is empty.
 func handlerKey(path string) (key, rest string) {
-	key, i := splitPath(path)
+	key, i := splitPath(path, 0)
 	if key == "" {
 		// TODO what *should* we get if we GET just an id?
 		return "", rest
@@ -292,27 +291,30 @@ func (r *Router) getter(id *charm.URL, val interface{}, fields ...string) error 
 		One(val)
 }
 
-func splitPath(path string) (elem string, nextIndex int) {
-	i := strings.Index(path, "/")
-	if i == -1 || i == len(path)-1 {
-		return path, len(path)
+func splitPath(path string, i int) (elem string, nextIndex int) {
+	j := strings.Index(path[i:], "/")
+	if j == -1 {
+		return path[i:], len(path)
 	}
-	return path[0:i], i + 1
+	j += i
+	if j == len(path)-1 {
+		return path[i:], len(path)
+	}
+	return path[i:j], j + 1
 }
 
 func splitId(path string) (url *charm.URL, rest string, err error) {
-	part, i := splitPath(path)
+	part, i := splitPath(path, 0)
 
-	// ~<username>
+	// skip ~<username>
 	if strings.HasPrefix(part, "~") {
-		part, i = splitPath(path[i:])
+		part, i = splitPath(path, i)
 	}
-	// series
+	// skip series
 	if knownSeries[part] {
-		part, i = splitPath(path[i:])
+		part, i = splitPath(path, i)
 	}
 	// charm name
-	part, i = splitPath(path[i:])
 
 	urlStr := strings.TrimSuffix(path[0:i], "/")
 	ref, series, err := charm.ParseReference(urlStr)
