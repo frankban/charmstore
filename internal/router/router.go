@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"log"
 	"reflect"
 	"strings"
 	"sync"
@@ -38,27 +39,24 @@ type IdHandler func(charmId *charm.URL, w http.ResponseWriter, req *http.Request
 // Handlers specifies how HTTP requests will be routed
 // by the router.
 type Handlers struct {
-	// Global holds handlers for paths not matched
-	// by Meta or Id. The map key is the path;
-	// the value is the handler that will be used
-	// to handle that path.
+	// Global holds handlers for paths not matched by Meta or Id.
+	// The map key is the path; the value is the handler that will
+	// be used to handle that path.
 	//
-	// Path matching is by matched by longest-prefix -
-	// the same as http.ServeMux.
+	// Path matching is by matched by longest-prefix - the same as
+	// http.ServeMux.
 	Global map[string]http.Handler
 
-	// Id holds handlers for paths which correspond
-	// to a single charm or bundle id other than the
-	// meta path. The map key holds the first
-	// element of the path, which may end in a
-	// trailing slash (/) to indicate that longer
-	// paths are allowed too.
+	// Id holds handlers for paths which correspond to a single
+	// charm or bundle id other than the meta path. The map key
+	// holds the first element of the path, which may end in a
+	// trailing slash (/) to indicate that longer paths are allowed
+	// too.
 	Id map[string]IdHandler
 
-	// Meta holds metadata handlers for paths under
-	// the meta endpoint. The map key holds the first
-	// element of the path, which may end in a
-	// trailing slash (/) to indicate that longer
+	// Meta holds metadata handlers for paths under the meta
+	// endpoint. The map key holds the first element of the path,
+	// which may end in a trailing slash (/) to indicate that longer
 	// paths are allowed too.
 	Meta map[string]MetaHandler
 }
@@ -70,17 +68,16 @@ type Router struct {
 	handler  http.Handler
 }
 
-// NewRouter returns a charm store router that
-// will route requests to the given handlers
-// and retrieve metadata from the given database.
-func NewRouter(db *mgo.Database, handlers *Handlers) *Router {
+// New returns a charm store router that will route requests to
+// the given handlers and retrieve metadata from the given database.
+func New(db *mgo.Database, handlers *Handlers) *Router {
 	r := &Router{
 		handlers: handlers,
 		db:       db,
 	}
 	mux := http.NewServeMux()
 	for path, handler := range r.handlers.Global {
-		mux.Handle(path, handler)
+		mux.Handle("/" + path, handler)
 	}
 	mux.Handle("/", HandleErrors(r.serveIds))
 	r.handler = mux
@@ -91,6 +88,7 @@ var ErrNotFound = fmt.Errorf("not found")
 
 // ServeHTTP implements http.Handler.ServeHTTP.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	log.Printf("req.URL: %s; path %s", req.URL, req.URL.Path)
 	r.handler.ServeHTTP(w, req)
 }
 
@@ -107,6 +105,8 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	}
 	// TODO(rog) can we really just always ignore a trailing slash ?
 	path := strings.TrimSuffix(req.URL.Path, "/")
+	path = strings.TrimPrefix(req.URL.Path, "/")
+	log.Printf("serveIds %q; path %q", req.URL, req.URL.Path)
 	url, path, err := splitId(path)
 	if err != nil {
 		return err
@@ -119,6 +119,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	if key == "" {
 		return ErrNotFound
 	}
+	log.Printf("handler key %q, rest: %q", key, path)
 	if handler, ok := r.handlers.Id[key]; ok {
 		req.URL.Path = path
 		handler(url, w, req)
@@ -242,12 +243,12 @@ func collectionForValue(val interface{}) (string, error) {
 // Note that the retrieved item should not be modified - it may be in
 // use concurrently by other goroutines.
 type ItemGetter interface {
-	GetItem(id *charm.URL, val interface{}, fields ...string) error
+	GetItem(id interface{}, val interface{}, fields ...string) error
 }
 
-type getterFunc func(id *charm.URL, val interface{}, fields ...string) error
+type getterFunc func(id interface{}, val interface{}, fields ...string) error
 
-func (f getterFunc) GetItem(id *charm.URL, val interface{}, fields ...string) error {
+func (f getterFunc) GetItem(id interface{}, val interface{}, fields ...string) error {
 	return f(id, val, fields...)
 }
 
@@ -273,7 +274,7 @@ func (r *Router) GetMetadata(id *charm.URL, includes []string) (map[string]inter
 	return results, nil
 }
 
-func (r *Router) getter(id *charm.URL, val interface{}, fields ...string) error {
+func (r *Router) getter(id interface{}, val interface{}, fields ...string) error {
 	collection, err := collectionForValue(val)
 	if err != nil {
 		return err

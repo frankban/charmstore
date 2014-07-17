@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/juju/charmstore/params"
+	jujutesting "github.com/juju/testing"
+	"gopkg.in/juju/charm.v2"
 	"io"
 	gc "launchpad.net/gocheck"
 	"strings"
@@ -15,12 +17,129 @@ import (
 )
 
 func TestPackage(t *testing.T) {
-	gc.TestingT(t)
+	jujutesting.MgoTestPackage(t, nil)
 }
 
-type RouterSuite struct{}
+type RouterSuite struct {
+	jujutesting.MgoSuite
+}
 
 var _ = gc.Suite(&RouterSuite{})
+
+var routerTests = []struct {
+	about      string
+	handlers   Handlers
+	urlStr     string
+	expectCode int
+	expectBody interface{}
+}{{
+	about: "global handler",
+	handlers: Handlers{
+		Global: map[string]http.Handler{
+			"foo": HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+				return &Foo{"hello"}, nil
+			}),
+		},
+	},
+	urlStr:     "http://example.com/foo",
+	expectCode: http.StatusOK,
+	expectBody: Foo{"hello"},
+}, {
+	about: "id handler",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:     "http://example.com/precise/wordpress-34/foo",
+	expectCode: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		CharmURL: "cs:precise/wordpress-34",
+	},
+}, {
+	about: "id handler with extra path",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo/": testIdHandler,
+		},
+	},
+	urlStr:     "http://example.com/precise/wordpress-34/foo/blah/arble",
+	expectCode: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		CharmURL: "cs:precise/wordpress-34",
+		Path:     "blah/arble",
+	},
+}, {
+	about: "id handler with allowed extra path but none given",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo/": testIdHandler,
+		},
+	},
+	urlStr:     "http://example.com/precise/wordpress-34/foo",
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "not found",
+	},
+}, {
+	about: "id handler with unwanted extra path",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:     "http://example.com/precise/wordpress-34/foo/blah",
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "not found",
+	},
+}, {
+	about: "id handler with user",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:     "http://example.com/~joe/precise/wordpress-34/foo",
+	expectCode: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		CharmURL: "cs:~joe/precise/wordpress-34",
+	},
+}, {
+	about: "id handler with user and extra path",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo/": testIdHandler,
+		},
+	},
+	urlStr:     "http://example.com/~joe/precise/wordpress-34/foo/blah/arble",
+	expectCode: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		CharmURL: "cs:~joe/precise/wordpress-34",
+		Path:     "blah/arble",
+	},
+}}
+
+type idHandlerTestResp struct {
+	CharmURL string
+	Path     string
+}
+
+func testIdHandler(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+	WriteJSON(w, http.StatusOK, idHandlerTestResp{
+		CharmURL: charmId.String(),
+		Path:     req.URL.Path,
+	})
+	return nil
+}
+
+func (s *RouterSuite) TestRouter(c *gc.C) {
+	for i, test := range routerTests {
+		c.Logf("test %d: %s", i, test.about)
+		router := New(s.Session.DB("database"), &test.handlers)
+		assertJSONCall(c, router, "GET", test.urlStr, "", test.expectCode, test.expectBody)
+	}
+}
 
 var splitIdTests = []struct {
 	path        string
@@ -111,7 +230,7 @@ var handlerTests = []struct {
 	}),
 	urlStr:     "http://example.com",
 	expectCode: http.StatusInternalServerError,
-	expectBody: &params.Error{
+	expectBody: params.Error{
 		Message: "an error",
 	},
 }, {
@@ -124,7 +243,7 @@ var handlerTests = []struct {
 	}),
 	urlStr:     "http://example.com",
 	expectCode: http.StatusInternalServerError,
-	expectBody: &params.Error{
+	expectBody: params.Error{
 		Message: "something went wrong",
 		Code:    "snafu",
 	},
@@ -141,14 +260,14 @@ var handlerTests = []struct {
 		return &Foo{"hello"}, nil
 	}),
 	expectCode: http.StatusOK,
-	expectBody: &Foo{"hello"},
+	expectBody: Foo{"hello"},
 }, {
 	about: "handleJSON, error case",
 	handler: HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 		return nil, fmt.Errorf("an error")
 	}),
 	expectCode: http.StatusInternalServerError,
-	expectBody: &params.Error{
+	expectBody: params.Error{
 		Message: "an error",
 	},
 }}
@@ -160,17 +279,29 @@ type Foo struct {
 func (s *RouterSuite) TestHandlers(c *gc.C) {
 	for i, test := range handlerTests {
 		c.Logf("test %d: %s", i, test.about)
-		rec := callHandler(c, test.handler, "GET", "http://example.com", "")
-		c.Assert(rec.Code, gc.Equals, test.expectCode)
-		if test.expectBody == nil {
-			c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
-			continue
-		}
-		resp := reflect.New(reflect.TypeOf(test.expectBody).Elem()).Interface()
-		err := json.Unmarshal(rec.Body.Bytes(), resp)
-		c.Assert(err, gc.IsNil)
-		c.Assert(resp, gc.DeepEquals, test.expectBody)
+		assertJSONCall(c, test.handler, "GET", "http://example.com", "", test.expectCode, test.expectBody)
 	}
+}
+
+func assertJSONCall(
+	c *gc.C,
+	handler http.Handler,
+	method string,
+	urlStr string,
+	body string,
+	expectCode int,
+	expectBody interface{},
+) {
+	rec := callHandler(c, handler, method, urlStr, body)
+	c.Assert(rec.Code, gc.Equals, expectCode, gc.Commentf("body: %s", rec.Body.Bytes()))
+	if expectBody == nil {
+		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
+		return
+	}
+	resp := reflect.New(reflect.TypeOf(expectBody))
+	err := json.Unmarshal(rec.Body.Bytes(), resp.Interface())
+	c.Assert(err, gc.IsNil)
+	c.Assert(resp.Elem().Interface(), gc.DeepEquals, expectBody)
 }
 
 func callHandler(c *gc.C, handler http.Handler, method string, urlStr string, body string) *httptest.ResponseRecorder {
