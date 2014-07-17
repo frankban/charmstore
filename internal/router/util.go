@@ -14,7 +14,7 @@ import (
 func HandleErrors(handle func(http.ResponseWriter, *http.Request) error) http.Handler {
 	f := func(w http.ResponseWriter, req *http.Request) {
 		if err := handle(w, req); err != nil {
-			WriteError(w, http.StatusInternalServerError, err)
+			WriteError(w, err)
 		}
 	}
 	return http.HandlerFunc(f)
@@ -33,7 +33,7 @@ func HandleJSON(handle func(http.ResponseWriter, *http.Request) (interface{}, er
 	return HandleErrors(f)
 }
 
-func WriteError(w http.ResponseWriter, status int, err error) {
+func WriteError(w http.ResponseWriter, err error) {
 	errResp := &params.Error{
 		Message: err.Error(),
 	}
