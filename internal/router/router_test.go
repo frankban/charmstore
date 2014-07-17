@@ -8,6 +8,7 @@ import (
 	"gopkg.in/juju/charm.v2"
 	"io"
 	gc "launchpad.net/gocheck"
+	"net/url"
 	"strings"
 
 	"net/http"
@@ -118,6 +119,16 @@ var routerTests = []struct {
 		CharmURL: "cs:~joe/precise/wordpress-34",
 		Path:     "blah/arble",
 	},
+}, {
+	about: "meta handler",
+	handlers: Handlers{
+		Meta: map[string]MetaHandler{
+			"foo": testMetaHandler,
+		},
+	},
+	urlStr:     "http://example.com/precise/wordpress-42/meta/foo",
+	expectCode: http.StatusOK,
+	expectBody: "sad",
 }}
 
 type idHandlerTestResp struct {
@@ -133,10 +144,38 @@ func testIdHandler(charmId *charm.URL, w http.ResponseWriter, req *http.Request)
 	return nil
 }
 
+func testMetaHandler(getter ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+	return "this will fail", nil
+}
+
+type testItem1 struct {
+	Id   int `bson:"_id"`
+	Name string
+}
+
+type testItem2 struct {
+	Id   int `bson:"_id"`
+	Name string
+}
+
 func (s *RouterSuite) TestRouter(c *gc.C) {
+	// Populate the database with two collections and a couple of items.
+	db := s.Session.DB("testing")
+	c1 := db.C("c1")
+	err := c1.Insert(&testItem1{1, "item1.1"}, &testItem1{2, "item1.2"})
+	c.Assert(err, gc.IsNil)
+	c2 := db.C("c2")
+	err = c2.Insert(&testItem2{1, "item2.1"}, &testItem2{2, "item2.2"})
+	c.Assert(err, gc.IsNil)
+
+	// Register the two collections.
+	RegisterCollection("c1", new(testItem1))
+	RegisterCollection("c2", new(testItem2))
+
+	// Run the table tests.
 	for i, test := range routerTests {
 		c.Logf("test %d: %s", i, test.about)
-		router := New(s.Session.DB("database"), &test.handlers)
+		router := New(db, &test.handlers)
 		assertJSONCall(c, router, "GET", test.urlStr, "", test.expectCode, test.expectBody)
 	}
 }

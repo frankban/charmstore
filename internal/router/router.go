@@ -2,16 +2,16 @@ package router
 
 import (
 	"fmt"
-	"net/http"
-	"net/url"
-	"log"
-	"reflect"
-	"strings"
-	"sync"
 	"github.com/juju/charmstore/params"
 	"gopkg.in/juju/charm.v2"
 	"labix.org/v2/mgo"
 	"labix.org/v2/mgo/bson"
+	"log"
+	"net/http"
+	"net/url"
+	"reflect"
+	"strings"
+	"sync"
 )
 
 var knownSeries = map[string]bool{
@@ -77,7 +77,7 @@ func New(db *mgo.Database, handlers *Handlers) *Router {
 	}
 	mux := http.NewServeMux()
 	for path, handler := range r.handlers.Global {
-		mux.Handle("/" + path, handler)
+		mux.Handle("/"+path, handler)
 	}
 	mux.Handle("/", HandleErrors(r.serveIds))
 	r.handler = mux
@@ -125,7 +125,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 		handler(url, w, req)
 		return nil
 	}
-	if key != "meta" {
+	if key != "meta/" {
 		return ErrNotFound
 	}
 	req.URL.Path = path
@@ -197,6 +197,9 @@ var (
 // for unmarshalling with mgo/bson.
 func RegisterCollection(collectionName string, docType interface{}) {
 	collectionMutex.Lock()
+	if collections == nil {
+		collections = make(map[reflect.Type]string)
+	}
 	defer collectionMutex.Unlock()
 	t := reflect.TypeOf(docType)
 	if t.Kind() != reflect.Ptr {
@@ -282,7 +285,7 @@ func (r *Router) getter(id interface{}, val interface{}, fields ...string) error
 	selector := make(bson.D, len(fields))
 	for i, field := range fields {
 		selector[i] = bson.DocElem{
-			Name: field,
+			Name:  field,
 			Value: 1,
 		}
 	}
