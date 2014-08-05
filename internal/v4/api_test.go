@@ -189,14 +189,26 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 			c.Assert(err, gc.IsNil)
 			c.Logf("	expected data for %q: %#v", url, expectData)
 			if isNull(expectData) {
-				storetesting.AssertJSONCall(c, s.srv, "GET", storeURL, "", http.StatusNotFound, params.Error{
-					Message: params.ErrMetadataNotFound.Error(),
-					Code:    params.ErrMetadataNotFound,
-				})
+				storetesting.AssertJSONCall(
+					c, storetesting.JSONCallParams{
+						Handler:    s.srv,
+						URL:        storeURL,
+						ExpectCode: http.StatusNotFound,
+						ExpectBody: params.Error{
+							Message: params.ErrMetadataNotFound.Error(),
+							Code:    params.ErrMetadataNotFound,
+						},
+					})
 				continue
 			}
 			tested = true
-			storetesting.AssertJSONCall(c, s.srv, "GET", storeURL, "", http.StatusOK, expectData)
+			storetesting.AssertJSONCall(
+				c, storetesting.JSONCallParams{
+					Handler:    s.srv,
+					URL:        storeURL,
+					ExpectBody: expectData,
+				})
+
 		}
 		if !tested {
 			c.Errorf("endpoint %q is null for all endpoints, so is not properly tested", ep.name)
@@ -235,8 +247,12 @@ func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
 			}
 		}
 		storeURL := storeURL(charmId + "/meta/any?" + strings.Join(flags, "&"))
-		storetesting.AssertJSONCall(c, s.srv, "GET", storeURL, "",
-			http.StatusOK, expectData)
+		storetesting.AssertJSONCall(
+			c, storetesting.JSONCallParams{
+				Handler:    s.srv,
+				URL:        storeURL,
+				ExpectBody: expectData,
+			})
 	}
 }
 
@@ -244,16 +260,21 @@ func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
 // dummy charm that has actions included.
 func (s *APISuite) TestMetaCharmActions(c *gc.C) {
 	url, dummy := s.addCharm(c, "dummy", "cs:precise/dummy-10")
-	storetesting.AssertJSONCall(c, s.srv,
-		"GET", storeURL("precise/dummy-10/meta/charm-actions"), "",
-		http.StatusOK, dummy.Actions())
-
-	storetesting.AssertJSONCall(c, s.srv,
-		"GET", storeURL("precise/dummy-10/meta/any?include=charm-actions"), "",
-		http.StatusOK, params.MetaAnyResponse{
-			Id: url,
-			Meta: map[string]interface{}{
-				"charm-actions": dummy.Actions(),
+	storetesting.AssertJSONCall(
+		c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        storeURL("precise/dummy-10/meta/charm-actions"),
+			ExpectBody: dummy.Actions(),
+		})
+	storetesting.AssertJSONCall(
+		c, storetesting.JSONCallParams{
+			Handler: s.srv,
+			URL:     storeURL("precise/dummy-10/meta/any?include=charm-actions"),
+			ExpectBody: params.MetaAnyResponse{
+				Id: url,
+				Meta: map[string]interface{}{
+					"charm-actions": dummy.Actions(),
+				},
 			},
 		})
 }
@@ -265,10 +286,15 @@ func (s *APISuite) TestBulkMeta(c *gc.C) {
 
 	_, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	_, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
-	storetesting.AssertJSONCall(c, s.srv, "GET", storeURL("meta/charm-metadata?id=precise/wordpress-23&id=precise/mysql-10"), "", http.StatusOK, map[string]*charm.Meta{
-		"precise/wordpress-23": wordpress.Meta(),
-		"precise/mysql-10":     mysql.Meta(),
-	})
+	storetesting.AssertJSONCall(
+		c, storetesting.JSONCallParams{
+			Handler: s.srv,
+			URL:     storeURL("meta/charm-metadata?id=precise/wordpress-23&id=precise/mysql-10"),
+			ExpectBody: map[string]*charm.Meta{
+				"precise/wordpress-23": wordpress.Meta(),
+				"precise/mysql-10":     mysql.Meta(),
+			},
+		})
 }
 
 func (s *APISuite) TestBulkMetaAny(c *gc.C) {
@@ -278,22 +304,27 @@ func (s *APISuite) TestBulkMetaAny(c *gc.C) {
 
 	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	mysqlURL, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
-	storetesting.AssertJSONCall(c, s.srv, "GET", storeURL("meta/any?include=charm-metadata&include=charm-config&id=precise/wordpress-23&id=precise/mysql-10"), "", http.StatusOK, map[string]params.MetaAnyResponse{
-		"precise/wordpress-23": {
-			Id: wordpressURL,
-			Meta: map[string]interface{}{
-				"charm-config":   wordpress.Config(),
-				"charm-metadata": wordpress.Meta(),
+	storetesting.AssertJSONCall(
+		c, storetesting.JSONCallParams{
+			Handler: s.srv,
+			URL:     storeURL("meta/any?include=charm-metadata&include=charm-config&id=precise/wordpress-23&id=precise/mysql-10"),
+			ExpectBody: map[string]params.MetaAnyResponse{
+				"precise/wordpress-23": {
+					Id: wordpressURL,
+					Meta: map[string]interface{}{
+						"charm-config":   wordpress.Config(),
+						"charm-metadata": wordpress.Meta(),
+					},
+				},
+				"precise/mysql-10": {
+					Id: mysqlURL,
+					Meta: map[string]interface{}{
+						"charm-config":   mysql.Config(),
+						"charm-metadata": mysql.Meta(),
+					},
+				},
 			},
-		},
-		"precise/mysql-10": {
-			Id: mysqlURL,
-			Meta: map[string]interface{}{
-				"charm-config":   mysql.Config(),
-				"charm-metadata": mysql.Meta(),
-			},
-		},
-	})
+		})
 }
 
 func (s *APISuite) TestIdsAreResolved(c *gc.C) {
@@ -302,7 +333,12 @@ func (s *APISuite) TestIdsAreResolved(c *gc.C) {
 	// defined, and the ResolveURL tests, this should
 	// be sufficient to "join the dots".
 	_, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
-	storetesting.AssertJSONCall(c, s.srv, "GET", storeURL("wordpress/meta/charm-metadata"), "", http.StatusOK, wordpress.Meta())
+	storetesting.AssertJSONCall(
+		c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        storeURL("wordpress/meta/charm-metadata"),
+			ExpectBody: wordpress.Meta(),
+		})
 }
 
 func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
@@ -312,9 +348,21 @@ func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
 			Message: params.ErrNotFound.Error(),
 			Code:    params.ErrNotFound,
 		}
-		storetesting.AssertJSONCall(c, s.srv, "GET", storeURL("precise/wordpress-23/meta/"+ep.name), "", http.StatusNotFound, expected)
+		storetesting.AssertJSONCall(
+			c, storetesting.JSONCallParams{
+				Handler:    s.srv,
+				URL:        storeURL("precise/wordpress-23/meta/" + ep.name),
+				ExpectCode: http.StatusNotFound,
+				ExpectBody: expected,
+			})
 		expected.Message = `no matching charm or bundle for "cs:wordpress"`
-		storetesting.AssertJSONCall(c, s.srv, "GET", storeURL("wordpress/meta/"+ep.name), "", http.StatusNotFound, expected)
+		storetesting.AssertJSONCall(
+			c, storetesting.JSONCallParams{
+				Handler:    s.srv,
+				URL:        storeURL("wordpress/meta/" + ep.name),
+				ExpectCode: http.StatusNotFound,
+				ExpectBody: expected,
+			})
 	}
 }
 
@@ -377,9 +425,15 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 }
 
 func assertNotImplemented(c *gc.C, h http.Handler, path string) {
-	storetesting.AssertJSONCall(c, h, "GET", storeURL(path), "", http.StatusInternalServerError, params.Error{
-		Message: "method not implemented",
-	})
+	storetesting.AssertJSONCall(
+		c, storetesting.JSONCallParams{
+			Handler:    h,
+			URL:        storeURL(path),
+			ExpectCode: http.StatusInternalServerError,
+			ExpectBody: params.Error{
+				Message: "method not implemented",
+			},
+		})
 }
 
 func entityFieldGetter(fieldName string) func(*charmstore.Store, *charm.Reference) (interface{}, error) {
