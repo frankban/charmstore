@@ -4,6 +4,7 @@
 package v4_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -50,7 +52,6 @@ func (s *ArchiveSuite) TestArchiveGet(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	rec := storetesting.DoRequest(c, s.srv, "GET", storeURL("precise/wordpress-23/archive"), nil, 0, nil)
-	c.Assert(err, gc.IsNil)
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
 
@@ -58,7 +59,6 @@ func (s *ArchiveSuite) TestArchiveGet(c *gc.C) {
 	// is working, we assume that the whole thing is working OK,
 	// as net/http is well-tested.
 	rec = storetesting.DoRequest(c, s.srv, "GET", storeURL("precise/wordpress-23/archive"), nil, 0, http.Header{"Range": {"bytes=10-100"}})
-	c.Assert(err, gc.IsNil)
 	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
@@ -369,6 +369,94 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, url *charm.Reference, fileName stri
 	c.Assert(err, gc.IsNil)
 	r.Close()
 	return size
+}
+
+var archiveFileErrorsTests = []struct {
+	about         string
+	path          string
+	expectStatus  int
+	expectMessage string
+	expectCode    params.ErrorCode
+}{{
+	about:         "entity not found",
+	path:          "trusty/no-such-42/archive/icon.svg",
+	expectStatus:  http.StatusNotFound,
+	expectMessage: "not found",
+	expectCode:    params.ErrNotFound,
+}, {
+	about:         "directory listing",
+	path:          "utopic/wordpress-0/archive/hooks",
+	expectStatus:  http.StatusForbidden,
+	expectMessage: "directory listing not allowed",
+	expectCode:    params.ErrForbidden,
+}, {
+	about:         "file not found",
+	path:          "utopic/wordpress-0/archive/no-such",
+	expectStatus:  http.StatusNotFound,
+	expectMessage: `file "no-such" not found in the archive`,
+	expectCode:    params.ErrNotFound,
+}}
+
+func (s *ArchiveSuite) TestArchiveFileErrors(c *gc.C) {
+	wordpress := charmtesting.Charms.CharmArchive(c.MkDir(), "wordpress")
+	url := mustParseReference("cs:utopic/wordpress-0")
+	err := s.store.UploadCharm(url, wordpress)
+	c.Assert(err, gc.IsNil)
+	for i, test := range archiveFileErrorsTests {
+		c.Logf("test %d: %s", i, test.about)
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        storeURL(test.path),
+			Method:     "GET",
+			ExpectCode: test.expectStatus,
+			ExpectBody: params.Error{
+				Message: test.expectMessage,
+				Code:    test.expectCode,
+			},
+		})
+	}
+}
+
+func (s *ArchiveSuite) TestArchiveFileGet(c *gc.C) {
+	ch := charmtesting.Charms.CharmArchive(c.MkDir(), "all-hooks")
+	err := s.store.UploadCharm(mustParseReference("cs:utopic/all-hooks-0"), ch)
+	c.Assert(err, gc.IsNil)
+	zipFile, err := zip.OpenReader(ch.Path)
+	c.Assert(err, gc.IsNil)
+	defer zipFile.Close()
+
+	// Check a file in the root directory.
+	s.assertArchiveFileContents(c, zipFile, "utopic/all-hooks-0/archive/metadata.yaml")
+	// Check a file in a subdirectory.
+	s.assertArchiveFileContents(c, zipFile, "utopic/all-hooks-0/archive/hooks/install")
+}
+
+func (s *ArchiveSuite) assertArchiveFileContents(c *gc.C, zipFile *zip.ReadCloser, path string) {
+	// Retrieve the expected bytes.
+	filePath := strings.SplitN(path, "/archive/", 2)[1]
+	var expectBytes []byte
+	for _, file := range zipFile.File {
+		if file.Name == filePath {
+			r, err := file.Open()
+			c.Assert(err, gc.IsNil)
+			defer r.Close()
+			expectBytes, err = ioutil.ReadAll(r)
+			c.Assert(err, gc.IsNil)
+		}
+	}
+	c.Assert(expectBytes, gc.Not(gc.HasLen), 0)
+
+	// Make the request.
+	url := storeURL(path)
+	rec := storetesting.DoRequest(c, s.srv, "GET", url, nil, 0, nil)
+
+	// Ensure the response is what we expect.
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	c.Assert(rec.Body.Bytes(), gc.DeepEquals, expectBytes)
+	headers := rec.Header()
+	c.Assert(headers.Get("Content-Length"), gc.Equals, strconv.Itoa(len(expectBytes)))
+	// We only have text files in the charm repository used for tests.
+	c.Assert(headers.Get("Content-Type"), gc.Equals, "text/plain; charset=utf-8")
 }
 
 // entityInfo holds all the information we want to find
