@@ -431,9 +431,13 @@ func (s *ArchiveSuite) TestArchiveFileGet(c *gc.C) {
 	s.assertArchiveFileContents(c, zipFile, "utopic/all-hooks-0/archive/hooks/install")
 }
 
+// assertArchiveFileContents checks that the response returned by the
+// serveArchiveFile endpoint is correct for the given archive and URL path.
 func (s *ArchiveSuite) assertArchiveFileContents(c *gc.C, zipFile *zip.ReadCloser, path string) {
-	// Retrieve the expected bytes.
+	// For example: trusty/django/archive/hooks/install -> hooks/install.
 	filePath := strings.SplitN(path, "/archive/", 2)[1]
+
+	// Retrieve the expected bytes.
 	var expectBytes []byte
 	for _, file := range zipFile.File {
 		if file.Name == filePath {

@@ -129,11 +129,14 @@ func (h *handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, r
 	if err != nil {
 		return errgo.Notef(err, "cannot read archive data for %s", id)
 	}
+
+	// Retrieve the requested file from the zip archive.
 	filePath := strings.TrimPrefix(req.URL.String(), "/")
 	for _, file := range zipReader.File {
 		if path.Clean(file.Name) != filePath {
 			continue
 		}
+		// The file is found.
 		fileInfo := file.FileInfo()
 		if fileInfo.IsDir() {
 			return errgo.WithCausef(nil, params.ErrForbidden, "directory listing not allowed")
@@ -143,6 +146,7 @@ func (h *handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, r
 			return errgo.Notef(err, "unable to read file %q", filePath)
 		}
 		defer content.Close()
+		// Send the response to the client.
 		ctype := mime.TypeByExtension(filepath.Ext(filePath))
 		if ctype != "" {
 			w.Header().Set("Content-Type", ctype)
