@@ -51,12 +51,12 @@ func New(store *charmstore.Store) http.Handler {
 			"archive-size":        h.entityHandler(h.metaArchiveSize, "size"),
 			"manifest":            h.entityHandler(h.metaManifest, "blobhash"),
 			"archive-upload-time": h.entityHandler(h.metaArchiveUploadTime, "uploadtime"),
+			"extra-info":          h.entityHandler(h.metaExtraInfo, "extrainfo"),
+			"extra-info/":         h.entityHandler(h.metaExtraInfoWithKey, "extrainfo"),
 
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
 			"color":              router.SingleIncludeHandler(h.metaColor),
 			"bundles-containing": router.SingleIncludeHandler(h.metaBundlesContaining),
-			"extra-info":         router.SingleIncludeHandler(h.metaExtraInfo),
-			"extra-info/":        router.SingleIncludeHandler(h.metaExtraInfoWithKey),
 			"charm-related":      router.SingleIncludeHandler(h.metaCharmRelated),
 		},
 	}, h.resolveURL)
@@ -273,18 +273,6 @@ func (h *handler) metaStats(id *charm.Reference, path string, method string, fla
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]]
 // http://tinyurl.com/oqc386r
 func (h *handler) metaBundlesContaining(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
-}
-
-// GET id/meta/extra-info
-// http://tinyurl.com/keos7wd
-func (h *handler) metaExtraInfo(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
-}
-
-// GET id/meta/extra-info/key
-// http://tinyurl.com/polrbn7
-func (h *handler) metaExtraInfoWithKey(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 

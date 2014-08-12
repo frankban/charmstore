@@ -52,3 +52,8 @@ type ManifestFile struct {
 type ArchiveUploadTimeResponse struct {
 	UploadTime time.Time
 }
+
+// ExtraInfo holds additional metadata recorded for a charm or bundle.
+type ExtraInfo struct {
+	Values map[string]interface{}
+}

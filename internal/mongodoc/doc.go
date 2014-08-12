@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"gopkg.in/juju/charm.v3"
+
+	"github.com/juju/charmstore/params"
 )
 
 // Entity holds the in-database representation of charm or bundle's
@@ -44,6 +46,9 @@ type Entity struct {
 	// by the bundle, including base URLs where they are
 	// not already included.
 	BundleCharms []*charm.Reference
+
+	// ExtraInfo includes additional metadata recorded for the charm or bundle.
+	ExtraInfo *params.ExtraInfo
 
 	// TODO Add fields denormalized for search purposes
 	// and search ranking field(s).
