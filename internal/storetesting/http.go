@@ -6,6 +6,7 @@ package storetesting
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -70,29 +71,61 @@ func AssertJSONCall(c *gc.C, p JSONCallParams) {
 		Username:      p.Username,
 		Password:      p.Password,
 	})
-	c.Assert(rec.Code, gc.Equals, p.ExpectStatus, gc.Commentf("body: %s", rec.Body.Bytes()))
+	AssertResponse(c, rec, p.ExpectStatus, p.ExpectBody)
+}
+
+// AssertResponse asserts that the given response recorder has recorded the
+// given HTTP status and response body.
+func AssertResponse(c *gc.C, rec *httptest.ResponseRecorder, expectStatus int, expectBody interface{}) {
+	c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body.Bytes()))
 
 	// Ensure the response includes the expected body.
-	if p.ExpectBody == nil {
+	if expectBody == nil {
 		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
 		return
 	}
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "application/json")
+	c.Assert(rec.Body.Bytes(), JSONEquals, expectBody)
+}
 
-	// Rather than unmarshaling into something of the expected
-	// body type, we reform the expected body in JSON and
-	// back to interface{}, so we can check the whole content.
-	// Otherwise we lose information when unmarshaling.
-	expectBodyBytes, err := json.Marshal(p.ExpectBody)
-	c.Assert(err, gc.IsNil)
-	var expectBodyVal interface{}
-	err = json.Unmarshal(expectBodyBytes, &expectBodyVal)
-	c.Assert(err, gc.IsNil)
+type jsonEqualChecker struct {
+	*gc.CheckerInfo
+}
 
-	var gotBodyVal interface{}
-	err = json.Unmarshal(rec.Body.Bytes(), &gotBodyVal)
-	c.Assert(err, gc.IsNil, gc.Commentf("json body: %q", rec.Body.Bytes()))
-	c.Assert(gotBodyVal, jc.DeepEquals, expectBodyVal)
+func (checker *jsonEqualChecker) Check(params []interface{}, names []string) (result bool, error string) {
+	gotContent, ok := params[0].([]byte)
+	if !ok {
+		return false, fmt.Sprintf("expected []byte, got %T", params[0])
+	}
+	expectContent := params[1]
+	expectContentBytes, err := json.Marshal(expectContent)
+	if err != nil {
+		return false, fmt.Sprintf("cannot marshal expected contents: %v", err)
+	}
+	var expectContentVal interface{}
+	if err := json.Unmarshal(expectContentBytes, &expectContentVal); err != nil {
+		return false, fmt.Sprintf("cannot unmarshal expected contents: %v", err)
+	}
+
+	var gotContentVal interface{}
+	if err := json.Unmarshal(gotContent, &gotContentVal); err != nil {
+		return false, fmt.Sprintf("cannot unmarshal obtained contents: %v; %q", err, gotContent)
+	}
+
+	if ok, err := jc.DeepEqual(gotContentVal, expectContentVal); !ok {
+		return false, err.Error()
+	}
+	return true, ""
+}
+
+// JSONEquals defines a checker that checks whether a byte slice, when
+// unmarshaled as JSON, is equal to the given value.
+// Rather than unmarshaling into something of the expected
+// body type, we reform the expected body in JSON and
+// back to interface{}, so we can check the whole content.
+// Otherwise we lose information when unmarshaling.
+var JSONEquals = &jsonEqualChecker{
+	&gc.CheckerInfo{Name: "JSONEquals", Params: []string{"obtained", "expected"}},
 }
 
 // DoRequestParams holds parameters for DoRequest.

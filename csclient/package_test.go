@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the LGPLv3, see LICENCE file for details.
 
-package legacy_test
+package csclient_test
 
 import (
 	"testing"

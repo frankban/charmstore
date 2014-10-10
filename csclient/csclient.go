@@ -1,6 +1,19 @@
 // The csclient package provides access to the charm store API.
 package csclient
 
+import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/juju/charmstore/params"
+	"github.com/juju/errgo"
+)
+
 // Client represents the client side of a charm store.
 type Client struct {
 	params Params
@@ -17,7 +30,7 @@ type Params struct {
 	// User and Password hold the authentication credentials
 	// for the client. If User is empty, no credentials will be
 	// sent.
-	User string
+	User     string
 	Password string
 }
 
@@ -36,12 +49,21 @@ func New(p Params) *Client {
 //
 // This is a low level method - more specific Client methods
 // should be used when possible.
-func (c *Client) Do(req *http.Request, result interface{}) error {
+func (c *Client) Do(req *http.Request, path string, result interface{}) error {
 	if c.params.User != "" {
 		userPass := c.params.User + ":" + c.params.Password
 		authBasic := base64.StdEncoding.EncodeToString([]byte(userPass))
 		req.Header.Set("Authorization", "Basic "+authBasic)
 	}
+
+	if !strings.HasPrefix(path, "/") {
+		return errgo.Newf("path %q is not absolute", path)
+	}
+	u, err := url.Parse(c.params.URL + "/v4" + path)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	req.URL = u
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -58,7 +80,7 @@ func (c *Client) Do(req *http.Request, result interface{}) error {
 			return errgo.Notef(err, "cannot unmarshal error response %q", sizeLimit(data))
 		}
 		if perr.Message == "" {
-			return errgo.New("error response with empty message %q", sizeLimit(data))
+			return errgo.Newf("error response with empty message %q", sizeLimit(data))
 		}
 		return &perr
 	}
@@ -79,7 +101,6 @@ func sizeLimit(data []byte) []byte {
 	return append(data[0:1024], fmt.Sprintf(" ... [%d bytes omitted]", len(data)-1024)...)
 }
 
-
 //func (c *Client) GetEntity(id *charm.Reference) (r io.ReadCloser, hash string, size int64, err error)
 //
 //func (c *Client) Upload(id *charm.Reference, r io.Reader, hash string, size int64) (*charm.Reference, error)
@@ -99,7 +120,7 @@ func sizeLimit(data []byte) []byte {
 //	}
 //
 //	map[string] json.RawMessage
-//		
+//
 //}
 //
 //type Meta interface {
@@ -140,7 +161,7 @@ func sizeLimit(data []byte) []byte {
 ////	}
 ////	err := client.Meta(id, &result)
 //func (c *Client) Meta(id *charm.Reference, result interface{}) error {
-//	
+//
 //}
 //
 //func hyphenate(s string) string {
