@@ -14,6 +14,8 @@ import (
 	"github.com/juju/errgo"
 )
 
+const apiVersion = "v4"
+
 // Client represents the client side of a charm store.
 type Client struct {
 	params Params
@@ -56,20 +58,24 @@ func (c *Client) Do(req *http.Request, path string, result interface{}) error {
 		req.Header.Set("Authorization", "Basic "+authBasic)
 	}
 
+	// Prepare the request.
 	if !strings.HasPrefix(path, "/") {
 		return errgo.Newf("path %q is not absolute", path)
 	}
-	u, err := url.Parse(c.params.URL + "/v4" + path)
+	u, err := url.Parse(c.params.URL + "/" + apiVersion + path)
 	if err != nil {
 		return errgo.Mask(err)
 	}
 	req.URL = u
 
+	// Send the request.
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return errgo.Mask(err)
 	}
 	defer resp.Body.Close()
+
+	// Parse the response.
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return errgo.Notef(err, "cannot read response body")

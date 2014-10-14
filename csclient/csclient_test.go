@@ -65,7 +65,13 @@ var doTests = []struct {
 	expectResult interface{}
 	expectError  string
 }{{
-	about: "example 1",
+	about: "success",
+	path:  "/wordpress/expand-id",
+	expectResult: []params.ExpandedId{{
+		Id: "cs:utopic/wordpress-42",
+	}},
+}, {
+	about: "success",
 	path:  "/wordpress/expand-id",
 	expectResult: []params.ExpandedId{{
 		Id: "cs:utopic/wordpress-42",
