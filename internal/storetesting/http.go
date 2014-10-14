@@ -5,13 +5,10 @@ package storetesting
 
 import (
 	"bytes"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 
-	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 )
 
@@ -86,46 +83,6 @@ func AssertResponse(c *gc.C, rec *httptest.ResponseRecorder, expectStatus int, e
 	}
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "application/json")
 	c.Assert(rec.Body.Bytes(), JSONEquals, expectBody)
-}
-
-type jsonEqualChecker struct {
-	*gc.CheckerInfo
-}
-
-func (checker *jsonEqualChecker) Check(params []interface{}, names []string) (result bool, error string) {
-	gotContent, ok := params[0].([]byte)
-	if !ok {
-		return false, fmt.Sprintf("expected []byte, got %T", params[0])
-	}
-	expectContent := params[1]
-	expectContentBytes, err := json.Marshal(expectContent)
-	if err != nil {
-		return false, fmt.Sprintf("cannot marshal expected contents: %v", err)
-	}
-	var expectContentVal interface{}
-	if err := json.Unmarshal(expectContentBytes, &expectContentVal); err != nil {
-		return false, fmt.Sprintf("cannot unmarshal expected contents: %v", err)
-	}
-
-	var gotContentVal interface{}
-	if err := json.Unmarshal(gotContent, &gotContentVal); err != nil {
-		return false, fmt.Sprintf("cannot unmarshal obtained contents: %v; %q", err, gotContent)
-	}
-
-	if ok, err := jc.DeepEqual(gotContentVal, expectContentVal); !ok {
-		return false, err.Error()
-	}
-	return true, ""
-}
-
-// JSONEquals defines a checker that checks whether a byte slice, when
-// unmarshaled as JSON, is equal to the given value.
-// Rather than unmarshaling into something of the expected
-// body type, we reform the expected body in JSON and
-// back to interface{}, so we can check the whole content.
-// Otherwise we lose information when unmarshaling.
-var JSONEquals = &jsonEqualChecker{
-	&gc.CheckerInfo{Name: "JSONEquals", Params: []string{"obtained", "expected"}},
 }
 
 // DoRequestParams holds parameters for DoRequest.
