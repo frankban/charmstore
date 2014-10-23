@@ -77,7 +77,7 @@ type Entity struct {
 	// entries in the file's blob. Storing this avoids
 	// the need to linearly read the zip file's manifest
 	// every time we access one of these files.
-	Contents map[FileId]ZipFile	`json:",omitempty" bson:",omitempty"`
+	Contents map[FileId]ZipFile `json:",omitempty" bson:",omitempty"`
 }
 
 type FileId string
