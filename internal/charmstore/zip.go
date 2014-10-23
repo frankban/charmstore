@@ -8,8 +8,9 @@ import (
 	"compress/flate"
 	"io"
 
-	"github.com/juju/charmstore/internal/mongodoc"
 	"gopkg.in/errgo.v1"
+
+	"github.com/juju/charmstore/internal/mongodoc"
 )
 
 // ZipFileReader returns a reader that will read
@@ -34,7 +35,7 @@ func NewZipFile(f *zip.File) (mongodoc.ZipFile, error) {
 		return mongodoc.ZipFile{}, errgo.Notef(err, "cannot determine data offset for %q", f.Name)
 	}
 	zf := mongodoc.ZipFile{
-		Offset: int64(offset),
+		Offset: offset,
 		Size:   int64(f.CompressedSize64),
 	}
 	switch f.Method {
