@@ -5,22 +5,14 @@ package v4
 
 import (
 	"archive/zip"
-	"encoding/json"
+	"io"
 	"net/http"
-	"net/url"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
+	"path"
 
 	"github.com/juju/jujusvg"
-	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/params"
@@ -34,7 +26,7 @@ func (h *Handler) serveDiagram(id *charm.Reference, w http.ResponseWriter, req *
 	}
 	entity, err := h.store.FindEntity(id, "bundledata")
 	if err != nil {
-		return errgo.Mask(err)
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 
 	var urlErr error
@@ -60,19 +52,11 @@ func (h *Handler) serveDiagram(id *charm.Reference, w http.ResponseWriter, req *
 	return nil
 }
 
-func (h *Handler) serveContent(
-	id *charm.Reference,
-	w http.ResponseWriter,
-	req *http.Request,
-	fileId mongodoc.FileId,
-	isContent func(*zip.File) bool,
-) error {
-
 func (h *Handler) serveIcon(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	if id.Series == "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "icons not supported for bundles")
 	}
-	
+
 	entity, err := h.store.FindEntity(id, "_id", "contents", "blobname")
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
@@ -81,14 +65,21 @@ func (h *Handler) serveIcon(id *charm.Reference, w http.ResponseWriter, req *htt
 		return path.Clean(f.Name) == "icon.svg"
 	}
 
-	r, err := h.store.OpenCachedFile(entity, mongodoc.FileIcon, isIconFile)
+	r, err := h.store.OpenCachedBlobFile(entity, mongodoc.FileIcon, isIconFile)
 	if err != nil {
 		if errgo.Cause(err) != params.ErrNotFound {
 			return errgo.Mask(err)
 		}
-		return h.serveDefaultIcon(w, req)
+		h.serveDefaultIcon(w, req)
+		return nil
 	}
 	w.Header().Set("ContentType", "image/svg+xml")
 	io.Copy(w, r)
 	return nil
+}
+
+const defaultIcon = "path/to/default-icon.svg"
+
+func (h *Handler) serveDefaultIcon(w http.ResponseWriter, req *http.Request) {
+	http.ServeFile(w, req, defaultIcon)
 }

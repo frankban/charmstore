@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/juju/jujusvg"
 	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
@@ -52,7 +50,7 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 			"archive":     h.serveArchive,
 			"archive/":    h.serveArchiveFile,
 			"diagram.svg": h.serveDiagram,
-			"icon": h.serveIcon,
+			"icon":        h.serveIcon,
 			"expand-id":   h.serveExpandId,
 			"resources":   h.serveResources,
 		},
