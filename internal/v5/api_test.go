@@ -1953,10 +1953,15 @@ func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
 	}
 }
 
+var (
+	notFoundMsg  = "no matching charm or bundle for .*"
+	ambiguousMsg = "no multi-series charm or bundle found for .*: please specify a series"
+)
+
 var resolveURLTests = []struct {
-	url      string
-	expect   *router.ResolvedURL
-	notFound bool
+	url         string
+	expect      *router.ResolvedURL
+	notFoundErr string
 }{{
 	url:    "wordpress",
 	expect: newResolvedURL("cs:~charmers/trusty/wordpress-25", 25),
@@ -1970,14 +1975,14 @@ var resolveURLTests = []struct {
 	url:    "~charmers/precise/wordpress",
 	expect: newResolvedURL("cs:~charmers/precise/wordpress-24", -1),
 }, {
-	url:      "~charmers/precise/wordpress-99",
-	notFound: true,
+	url:         "~charmers/precise/wordpress-99",
+	notFoundErr: notFoundMsg,
 }, {
 	url:    "~charmers/wordpress",
 	expect: newResolvedURL("cs:~charmers/trusty/wordpress-25", -1),
 }, {
-	url:      "~charmers/wordpress-24",
-	notFound: true,
+	url:         "~charmers/wordpress-24",
+	notFoundErr: ambiguousMsg,
 }, {
 	url:    "~bob/wordpress",
 	expect: newResolvedURL("cs:~bob/trusty/wordpress-1", -1),
@@ -1988,32 +1993,32 @@ var resolveURLTests = []struct {
 	url:    "bigdata",
 	expect: newResolvedURL("cs:~charmers/utopic/bigdata-10", 10),
 }, {
-	url:      "wordpress-24",
-	notFound: true,
+	url:         "wordpress-24",
+	notFoundErr: ambiguousMsg,
 }, {
 	url:    "bundlelovin",
 	expect: newResolvedURL("cs:~charmers/bundle/bundlelovin-10", 10),
 }, {
-	url:      "wordpress-26",
-	notFound: true,
+	url:         "wordpress-26",
+	notFoundErr: notFoundMsg,
 }, {
-	url:      "foo",
-	notFound: true,
+	url:         "foo",
+	notFoundErr: notFoundMsg,
 }, {
-	url:      "trusty/bigdata",
-	notFound: true,
+	url:         "trusty/bigdata",
+	notFoundErr: notFoundMsg,
 }, {
-	url:      "~bob/wily/django-47",
-	notFound: true,
+	url:         "~bob/wily/django-47",
+	notFoundErr: notFoundMsg,
 }, {
-	url:      "~bob/django",
-	notFound: true,
+	url:         "~bob/django",
+	notFoundErr: notFoundMsg,
 }, {
-	url:      "wily/django",
-	notFound: true,
+	url:         "wily/django",
+	notFoundErr: notFoundMsg,
 }, {
-	url:      "django",
-	notFound: true,
+	url:         "django",
+	notFoundErr: notFoundMsg,
 }, {
 	url:    "~bob/multi-series",
 	expect: newResolvedURL("cs:~bob/multi-series-0", -1),
@@ -2044,9 +2049,9 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 			Store:   s.store,
 			Channel: params.UnpublishedChannel,
 		}), url)
-		if test.notFound {
+		if test.notFoundErr != "" {
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
-			c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for .*`)
+			c.Assert(err, gc.ErrorMatches, test.notFoundErr)
 			c.Assert(rurl, gc.IsNil)
 			continue
 		}

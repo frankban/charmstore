@@ -497,10 +497,8 @@ func (s *Store) FindBestEntity(url *charm.URL, channel params.Channel, fields ma
 	if url.Revision != -1 {
 		// If the URL contains a revision, then it refers to a single entity.
 		entity, err := s.findSingleEntity(url, fields)
-		if errgo.Cause(err) == params.ErrNotFound {
-			return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
-		} else if err != nil {
-			return nil, errgo.Mask(err)
+		if err != nil {
+			return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
 		// If a channel was specified make sure the entity is in that channel.
 		// This is crucial because if we don't do this, then the user could choose
@@ -542,10 +540,19 @@ func (s *Store) findSingleEntity(url *charm.URL, fields map[string]int) (*mongod
 	if err == nil {
 		return &entity, nil
 	}
-	if err == mgo.ErrNotFound {
-		return nil, errgo.WithCausef(err, params.ErrNotFound, "no matching charm or bundle for %s", url)
+	if err != mgo.ErrNotFound {
+		return nil, errgo.Notef(err, "cannot find entities matching %s", url)
 	}
-	return nil, errgo.Notef(err, "cannot find entities matching %s", url)
+	if url.Series == "" {
+		count, err := s.EntitiesQuery(url.WithRevision(-1)).Count()
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot count entities matching %s", url)
+		}
+		if count > 0 {
+			return nil, errgo.WithCausef(err, params.ErrNotFound, "no multi-series charm or bundle found for %s: please specify a series", url)
+		}
+	}
+	return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
 }
 
 // findEntityInChannel attempts to find an entity on the given channel. The
