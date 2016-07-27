@@ -1222,6 +1222,7 @@ func (h *ReqHandler) metaPublished(entity *mongodoc.Entity, id *router.ResolvedU
 				info[i].Current = true
 			}
 		}
+		// UGLY AS HELL.
 		for _, url := range baseEntity.ChannelEntities["development"] {
 			if *url == *entity.URL {
 				info[i].Current = true
