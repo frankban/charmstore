@@ -568,6 +568,10 @@ func setEntityChannels(entity *mongodoc.Entity, chans []params.Channel) {
 			entity.Development = true
 		case params.StableChannel:
 			entity.Stable = true
+		case params.BetaChannel:
+			entity.Beta = true
+		case params.CandidateChannel:
+			entity.Candidate = true
 		}
 	}
 }
@@ -637,6 +641,8 @@ func (s *Store) addEntity(entity *mongodoc.Entity) (err error) {
 		ChannelACLs: map[params.Channel]mongodoc.ACL{
 			params.UnpublishedChannel: acls,
 			params.DevelopmentChannel: acls,
+			params.BetaChannel:        acls,
+			params.CandidateChannel:   acls,
 			params.StableChannel:      acls,
 		},
 		Promulgated: entity.PromulgatedURL != nil,

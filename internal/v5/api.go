@@ -186,6 +186,8 @@ func (s *StoreWithChannel) FindBaseEntity(url *charm.URL, fields map[string]int)
 var ValidChannels = map[params.Channel]bool{
 	params.UnpublishedChannel: true,
 	params.DevelopmentChannel: true,
+	params.CandidateChannel:   true,
+	params.BetaChannel:        true,
 	params.StableChannel:      true,
 }
 
@@ -268,7 +270,7 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"bundle-metadata":      h.EntityHandler(h.metaBundleMetadata, "bundledata"),
 			"bundles-containing":   h.EntityHandler(h.metaBundlesContaining),
 			"bundle-unit-count":    h.EntityHandler(h.metaBundleUnitCount, "bundleunitcount"),
-			"published":            h.EntityHandler(h.metaPublished, "development", "stable"),
+			"published":            h.EntityHandler(h.metaPublished, "development", "stable", "beta", "candidate"),
 			"charm-actions":        h.EntityHandler(h.metaCharmActions, "charmactions"),
 			"charm-config":         h.EntityHandler(h.metaCharmConfig, "charmconfig"),
 			"charm-metadata":       h.EntityHandler(h.metaCharmMetadata, "charmmeta"),
@@ -1188,7 +1190,8 @@ func (h *ReqHandler) metaPublished(entity *mongodoc.Entity, id *router.ResolvedU
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
-	info := make([]params.PublishedInfo, 0, 2)
+	info := make([]params.PublishedInfo, 0, 4)
+	logger.Infof("=============== ent: %#v", entity)
 	if entity.Development {
 		info = append(info, params.PublishedInfo{
 			Channel: params.DevelopmentChannel,
@@ -1199,10 +1202,27 @@ func (h *ReqHandler) metaPublished(entity *mongodoc.Entity, id *router.ResolvedU
 			Channel: params.StableChannel,
 		})
 	}
+	if entity.Beta {
+		info = append(info, params.PublishedInfo{
+			Channel: params.BetaChannel,
+		})
+	}
+	if entity.Candidate {
+		info = append(info, params.PublishedInfo{
+			Channel: params.CandidateChannel,
+		})
+	}
+	logger.Infof("================ INFO: %#v", info)
+	logger.Infof("================ CHEN: %#v", baseEntity.ChannelEntities)
 	for i, pinfo := range info {
 		// The entity is current for a channel if any series within
 		// a channel refers to the entity.
 		for _, url := range baseEntity.ChannelEntities[pinfo.Channel] {
+			if *url == *entity.URL {
+				info[i].Current = true
+			}
+		}
+		for _, url := range baseEntity.ChannelEntities["development"] {
 			if *url == *entity.URL {
 				info[i].Current = true
 			}
@@ -1465,6 +1485,8 @@ func (h *ReqHandler) servePromulgate(id *router.ResolvedURL, w http.ResponseWrit
 var validPublishChannels = map[params.Channel]bool{
 	params.DevelopmentChannel: true,
 	params.StableChannel:      true,
+	params.BetaChannel:        true,
+	params.CandidateChannel:   true,
 }
 
 // PUT id/publish

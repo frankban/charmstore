@@ -146,6 +146,9 @@ type Entity struct {
 	// Stable holds whether the entity has been published in the
 	// "stable" channel.
 	Stable bool
+
+	Beta      bool
+	Candidate bool
 }
 
 // PreferredURL returns the preferred way to refer to this entity. If

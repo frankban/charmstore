@@ -520,6 +520,14 @@ func (s *Store) FindBestEntity(url *charm.URL, channel params.Channel, fields ma
 			if !entity.Stable {
 				return nil, errgo.WithCausef(nil, params.ErrNotFound, "%s not found in stable channel", url)
 			}
+		case params.CandidateChannel:
+			if !entity.Candidate {
+				return nil, errgo.WithCausef(nil, params.ErrNotFound, "%s not found in candidate channel", url)
+			}
+		case params.BetaChannel:
+			if !entity.Beta {
+				return nil, errgo.WithCausef(nil, params.ErrNotFound, "%s not found in beta channel", url)
+			}
 		case params.DevelopmentChannel:
 			if !entity.Development {
 				return nil, errgo.WithCausef(nil, params.ErrNotFound, "%s not found in development channel", url)
@@ -781,8 +789,12 @@ func (s *Store) Publish(url *router.ResolvedURL, resources map[string]int, chann
 		switch c {
 		case params.StableChannel:
 			updateSearch = true
-			fallthrough
+			actualChannels = append(actualChannels, c)
 		case params.DevelopmentChannel:
+			actualChannels = append(actualChannels, params.Channel("development"))
+		case params.BetaChannel:
+			actualChannels = append(actualChannels, c)
+		case params.CandidateChannel:
 			actualChannels = append(actualChannels, c)
 		}
 	}

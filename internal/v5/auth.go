@@ -552,6 +552,10 @@ func (h *ReqHandler) entityChannel(id *router.ResolvedURL) (params.Channel, erro
 	switch {
 	case entity.Stable:
 		ch = params.StableChannel
+	case entity.Candidate:
+		ch = params.CandidateChannel
+	case entity.Beta:
+		ch = params.BetaChannel
 	case entity.Development:
 		ch = params.DevelopmentChannel
 	default:
