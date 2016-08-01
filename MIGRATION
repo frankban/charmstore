@@ -1,0 +1,4 @@
+- entity: rename development field to edge;
+- entity: add beta and candidate boolean fields (initially both false);
+- base-entity: ChannelACLs, ChannelEntities and ChannelResources "development" keys, if any, must be renamed to "edge";
+- base-entity: copy ChannelEntities["unpublished"] to ChannelEntities["candidate"] and ChannelEntities["beta"].
